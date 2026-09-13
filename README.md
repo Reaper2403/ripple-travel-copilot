@@ -100,6 +100,10 @@ Ripple combines explicit user preferences with a conservative executive-assistan
 
 Notion is not used as a raw transaction ledger. It is the handoff surface a human executive assistant can open and understand immediately.
 
+![Ripple Notion decision brief with week-at-a-glance context, impact, and change rationale](public/demo-assets/ripple-notion-decision-brief.png)
+
+*A generated decision brief gives the executive and their assistant a shared view of the week, the approved decision, its impact, and why the change was made.*
+
 Every confirmed decision brief contains:
 
 - **Week at a glance** — the latest commitment, why it matters, next checkpoint, and owner.

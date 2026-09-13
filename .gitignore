@@ -1,0 +1,26 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and run artifacts
+*.db
+*.db-shm
+*.db-wal
+artifacts/
+coverage/
+bench/results/
+.data/
+*.tsbuildinfo
+
+# Dependencies/build output
+node_modules/
+.DS_Store
+dist/
+.next/
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+.data/

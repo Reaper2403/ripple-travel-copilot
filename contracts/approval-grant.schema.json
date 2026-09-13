@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ripple.example.com/contracts/approval-grant.schema.json",
+  "title": "ApprovalGrant",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "approval_id", "actor_id", "case_id", "case_version", "plan_id", "plan_hash", "manifest_hash", "source_snapshot_hash", "calendar_snapshot_hash", "issued_at", "expires_at", "nonce"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "approval_id": { "type": "string", "minLength": 1 },
+    "actor_id": { "type": "string", "minLength": 1 },
+    "case_id": { "type": "string", "minLength": 1 },
+    "case_version": { "type": "integer", "minimum": 1 },
+    "plan_id": { "type": "string", "minLength": 1 },
+    "plan_hash": { "$ref": "#/$defs/hash" },
+    "manifest_hash": { "$ref": "#/$defs/hash" },
+    "source_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "calendar_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "nonce": { "type": "string", "minLength": 16 },
+    "consumed_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ripple.example.com/contracts/disruption-facts.schema.json",
+  "title": "DisruptionFacts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "segments", "facts", "ambiguities", "case_confidence"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "kind": {
+      "enum": ["DELAY", "CANCELLATION", "SCHEDULE_CHANGE", "MISSED_CONNECTION", "HOTEL_CHANGE", "UNKNOWN"]
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["segment_id", "kind"],
+        "properties": {
+          "segment_id": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["FLIGHT", "RAIL", "HOTEL", "OTHER"] },
+          "carrier": { "type": "string" },
+          "service_number": { "type": "string" },
+          "origin": { "type": "string" },
+          "destination": { "type": "string" },
+          "scheduled_start_at": { "type": "string", "format": "date-time" },
+          "scheduled_end_at": { "type": "string", "format": "date-time" },
+          "revised_start_at": { "type": "string", "format": "date-time" },
+          "revised_end_at": { "type": "string", "format": "date-time" },
+          "source_timezone": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "value", "evidence", "confidence"],
+        "properties": {
+          "field": { "type": "string", "minLength": 1 },
+          "value": {},
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["message_id", "excerpt"],
+            "properties": {
+              "message_id": { "type": "string", "minLength": 1 },
+              "excerpt": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "start_offset": { "type": "integer", "minimum": 0 },
+              "end_offset": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "ambiguities": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "case_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

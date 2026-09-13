@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ripple.example.com/contracts/execution-receipt.schema.json",
+  "title": "ExecutionReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "trace_id", "case_id", "action_id", "plan_hash", "connector", "operation", "idempotency_key", "attempt", "status", "request_fingerprint", "started_at", "evidence_refs"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "case_id": { "type": "string", "minLength": 1 },
+    "action_id": { "type": "string", "minLength": 1 },
+    "plan_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "connector": { "enum": ["GMAIL", "CALENDAR", "ARTIFACT"] },
+    "operation": { "type": "string", "minLength": 1 },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["PLANNED", "STARTED", "SUCCEEDED", "FAILED", "UNKNOWN", "SKIPPED", "COMPENSATED"] },
+    "request_fingerprint": { "type": "string", "minLength": 1 },
+    "provider_ref": { "type": "string" },
+    "provider_version": { "type": "string" },
+    "verified": { "type": "boolean" },
+    "before_hash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "after_hash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "latency_ms": { "type": "integer", "minimum": 0 },
+    "evidence_refs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "retryable", "safe_message"],
+      "properties": {
+        "category": { "enum": ["AUTH", "PERMISSION", "RATE_LIMIT", "CONFLICT", "VALIDATION", "TRANSIENT", "PERMANENT", "UNKNOWN_OUTCOME"] },
+        "provider_code": { "type": "string" },
+        "retryable": { "type": "boolean" },
+        "safe_message": { "type": "string", "minLength": 1 },
+        "redacted_details": { "type": "object" }
+      }
+    }
+  }
+}

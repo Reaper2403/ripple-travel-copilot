@@ -4,11 +4,12 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeProviders } from "../src/lib/adapters/fake";
 import { hash } from "../src/lib/domain/hash";
-import type { CalendarSnapshot } from "../src/lib/domain/types";
+import type { CalendarSnapshot, SourceMessage } from "../src/lib/domain/types";
 import { DurableStore } from "../src/lib/persistence";
 import { ConversationStore } from "../src/lib/v2/conversation-persistence";
 import { ConversationService } from "../src/lib/v2/conversation-service";
 import { ProposalService } from "../src/lib/v2/proposal-service";
+import type { AssistantPlanner } from "../src/lib/v2/smart-assistant";
 
 const USER = "20c8f906-7e8d-4d3f-b4d8-eb872aa4ed8f";
 const directories: string[] = [];
@@ -19,15 +20,15 @@ function calendar(now: Date): CalendarSnapshot {
   return { ...base, snapshot_hash: hash({ ...base, captured_at: undefined }) };
 }
 
-async function harness(fault?: "NOTION_TRACKER_UPSERT" | "CALENDAR_HOLD_UPSERT", suppliedSnapshot?: CalendarSnapshot) {
+async function harness(fault?: "NOTION_TRACKER_UPSERT" | "CALENDAR_HOLD_UPSERT", suppliedSnapshot?: CalendarSnapshot, planner?: AssistantPlanner, notice?: SourceMessage) {
   const directory = await mkdtemp(path.join(tmpdir(), "ripple-v2-proposal-"));
   directories.push(directory);
   const time = { now: new Date() };
   const snapshot = suppliedSnapshot ?? calendar(time.now);
   const conversations = new ConversationStore(path.join(directory, "conversations.json"));
-  const readers = () => ({ calendar: { snapshot: async () => snapshot }, mail: { scan: async () => ({ message_ids: [] }), get_message: async () => { throw new Error("not called"); } } });
+  const readers = () => ({ calendar: { snapshot: async () => snapshot }, mail: { scan: async () => ({ message_ids: notice ? [notice.message_id] : [] }), get_message: async () => { if (!notice) throw new Error("not called"); return notice; } } });
   const authorize = async () => ({ calendarId: "calendar" });
-  const assistant = new ConversationService(conversations, readers, authorize, () => time.now);
+  const assistant = new ConversationService(conversations, readers, authorize, () => time.now, planner);
   const providers = new FakeProviders(fault ? { action_type: fault, category: fault === "CALENDAR_HOLD_UPSERT" ? "TRANSIENT" : "AUTH" } : {});
   const receipts = new DurableStore(path.join(directory, "receipts.json"));
   const proposals = new ProposalService(conversations, authorize, readers, () => providers, receipts, () => time.now);
@@ -37,6 +38,30 @@ async function harness(fault?: "NOTION_TRACKER_UPSERT" | "CALENDAR_HOLD_UPSERT",
 }
 
 describe("v2 proposal safety and execution", () => {
+  it("converts a labeled meeting request into free slots and an exact Calendar invite preview", async () => {
+    const notice: SourceMessage = { message_id: "labeled-request", thread_id: "thread", source_version: "1", content_hash: "hash", received_at: new Date().toISOString(), from: "Requester <requester@example.com>", subject: "Partnership planning next week", body_text: "Could we schedule a 60-minute partnership review next week? Tuesday or Wednesday afternoon works." };
+    const planner: AssistantPlanner = { plan: async (input) => {
+      if (!input.notices.length) return null;
+      const start = new Date(input.now.getTime() + 2 * 60 * 60 * 1000);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      return {
+        intent: "PREPARE_WEEK", title: "One meeting request needs a slot", summary: "The partnership request can fit without disturbing higher-priority commitments.", clarification_question: null,
+        assumptions: ["The requester stated a 60-minute duration."],
+        labeled_email_action: { source_message_ref: input.notices[0].message_ref, kind: "MEETING_REQUEST", title: "Partnership planning", duration_minutes: 60, constraints_summary: "Next week, Tuesday or Wednesday afternoon", importance: "MEDIUM" },
+        insights: [{ kind: "RECENT_CHANGE", title: "Partnership meeting requested", detail: "A labeled sender requested a 60-minute partnership review.", event_refs: [] }],
+        alternatives: [{ title: "Offer the first free hour", summary: "Send a calendar invitation after confirmation.", tradeoffs: ["Preserves existing commitments"], recommended: true, candidate_block: { title: "Partnership planning", start_at: start.toISOString(), end_at: end.toISOString(), timezone: "Europe/Berlin" } }],
+      };
+    } };
+    const setup = await harness(undefined, undefined, planner, notice);
+    const created = await setup.assistant.create(USER);
+    const analyzed = await setup.assistant.send(USER, created.conversation.conversation_id, { content: "Prepare my week and include labeled requests", timezone: "Europe/Berlin" });
+    const draft = analyzed.proposals[0];
+    expect(draft.labeled_email_action).toMatchObject({ kind: "MEETING_REQUEST", sender_email: "requester@example.com", duration_minutes: 60 });
+    const selectedView = await setup.proposals.select(USER, draft.proposal_id, draft.version, draft.alternatives[0].alternative_id);
+    const calendarAction = selectedView.proposals[0].manifest?.actions.find((action) => action.type === "CALENDAR_HOLD_UPSERT");
+    expect(calendarAction).toMatchObject({ title: "Partnership planning", email_request: { sender_email: "requester@example.com", subject: "Partnership planning next week" } });
+  });
+
   it("turns a conflicting non-owned invitation into an exact proposed-time Calendar action", async () => {
     const now = new Date();
     const source = calendar(now);
@@ -57,6 +82,32 @@ describe("v2 proposal safety and execution", () => {
     const selectedView = await setup.proposals.select(USER, draft.proposal_id, draft.version, draft.alternatives[0].alternative_id);
     const calendarAction = selectedView.proposals[0].manifest?.actions.find((action) => action.type === "CALENDAR_HOLD_UPSERT");
     expect(calendarAction).toMatchObject({ title: "Proposed time · External commitment", proposal_for: { event_ref: "external-invite", organizer_email: "organizer@example.com" } });
+  });
+
+  it("turns an owned conflicting meeting into an exact move rather than a second event", async () => {
+    const now = new Date();
+    const source = calendar(now);
+    const monday = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const firstStart = new Date(monday); firstStart.setUTCHours(9, 0, 0, 0);
+    const firstEnd = new Date(firstStart.getTime() + 60 * 60 * 1000);
+    source.events = [
+      { event_ref: "owned-hiring", source_calendar: "SELECTED", provider_version: "etag-hiring", title: "Leadership hiring review", start_at: firstStart.toISOString(), end_at: firstEnd.toISOString(), timezone: "Europe/Berlin", attendees: ["stakeholder@example.com"], organizer: "operator@example.com", owned_by_operator: true, visibility: "DEFAULT" },
+      { event_ref: "owned-board", source_calendar: "SELECTED", provider_version: "etag-board", title: "Board preparation", start_at: new Date(firstStart.getTime() + 30 * 60 * 1000).toISOString(), end_at: new Date(firstEnd.getTime() + 30 * 60 * 1000).toISOString(), timezone: "Europe/Berlin", attendees: [], organizer: "operator@example.com", owned_by_operator: true, visibility: "DEFAULT" },
+    ];
+    source.snapshot_hash = hash({ ...source, captured_at: undefined });
+    const setup = await harness(undefined, source);
+    const created = await setup.assistant.create(USER);
+    const analyzed = await setup.assistant.send(USER, created.conversation.conversation_id, { content: "Reschedule Leadership hiring review to a free time", timezone: "Europe/Berlin" });
+    const draft = analyzed.proposals[0];
+    expect(draft.target_event).toMatchObject({ event_ref: "owned-hiring", owned_by_operator: true, provider_version: "etag-hiring" });
+    expect(draft.alternatives[0].summary).toContain("clear its original calendar block");
+    const selectedView = await setup.proposals.select(USER, draft.proposal_id, draft.version, draft.alternatives[0].alternative_id);
+    const calendarAction = selectedView.proposals[0].manifest?.actions.find((action) => action.type === "CALENDAR_HOLD_UPSERT");
+    expect(calendarAction).toMatchObject({
+      title: "Leadership hiring review",
+      reschedule_owned: { event_ref: "owned-hiring", source_calendar: "SELECTED", expected_version: "etag-hiring" },
+    });
+    expect(calendarAction).not.toHaveProperty("proposal_for");
   });
 
   it("keeps selection and confirmation write-free, then executes the exact Notion-first manifest once", async () => {

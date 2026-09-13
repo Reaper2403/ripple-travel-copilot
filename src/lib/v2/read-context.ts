@@ -33,12 +33,21 @@ export const createReadContext: ReadContextFactory = (calendarId) => {
 
 export interface SafeRecentNotice {
   message_ref: string;
+  sender_email?: string;
   subject: string;
   received_at: string;
+  excerpt: string;
 }
 
 export function safeNotice(source: SourceMessage, messageRef: string): SafeRecentNotice {
-  return { message_ref: messageRef, subject: source.subject.slice(0, 160), received_at: source.received_at };
+  const sender = source.from.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] ?? source.from.match(/\b[^\s<>@]+@[^\s<>@]+\b/)?.[0];
+  return {
+    message_ref: messageRef,
+    sender_email: sender?.toLowerCase(),
+    subject: source.subject.replace(/\s+/g, " ").trim().slice(0, 160),
+    received_at: source.received_at,
+    excerpt: source.body_text.replace(/\s+/g, " ").trim().slice(0, 1200),
+  };
 }
 
 export function privacyFilteredSnapshot(snapshot: CalendarSnapshot): CalendarSnapshot {

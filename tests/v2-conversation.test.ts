@@ -7,7 +7,7 @@ import type { CalendarSnapshot, SourceMessage } from "../src/lib/domain/types";
 import { ConversationStore } from "../src/lib/v2/conversation-persistence";
 import { ConversationService } from "../src/lib/v2/conversation-service";
 import { publicConversationView, publicConversationViewSchema, schedulingProposalSchema } from "../src/lib/v2/contracts";
-import type { ReadContextPorts } from "../src/lib/v2/read-context";
+import { safeNotice, type ReadContextPorts } from "../src/lib/v2/read-context";
 import { sanitizeAssistantPlan, type AssistantPlanner } from "../src/lib/v2/smart-assistant";
 
 const directories: string[] = [];
@@ -42,6 +42,14 @@ async function harness(planner?: AssistantPlanner) {
 }
 
 describe("v2 read-only assistant", () => {
+  it("bounds and normalizes labeled-email content while preferring the reply contact", () => {
+    const source: SourceMessage = { message_id: "raw", thread_id: "thread", source_version: "1", content_hash: "hash", received_at: NOW.toISOString(), from: "Sender <sender@example.com>", subject: "  Meeting   request  ", body_text: `First line\n\n${"detail ".repeat(300)}` };
+    const notice = safeNotice({ ...source, from: "Requester <requester@example.com>" }, "safe-ref");
+    expect(notice).toMatchObject({ message_ref: "safe-ref", sender_email: "requester@example.com", subject: "Meeting request" });
+    expect(notice.excerpt.length).toBeLessThanOrEqual(1200);
+    expect(notice.excerpt).not.toContain("\n");
+  });
+
   it("grounds Prepare my week in a privacy-filtered snapshot and produces structured options", async () => {
     const { service, writes } = await harness();
     const created = await service.create(USER);
@@ -113,6 +121,7 @@ describe("v2 read-only assistant", () => {
           summary: "Your board review is the highest-priority commitment in that hour, so I would protect it rather than suggest an unrelated opening.",
           clarification_question: "Should I find another full hour, or protect the free portion around the board review?",
           assumptions: ["Board and external commitments take priority over flexible internal work."],
+          labeled_email_action: null,
           insights: [{ kind: "CONFLICT", title: "Protect the board review", detail: "The board review overlaps the requested hour and should remain unchanged.", event_refs: ["board"] }],
           alternatives: [],
         };
@@ -135,6 +144,7 @@ describe("v2 read-only assistant", () => {
       summary: "I can protect the requested hour.",
       clarification_question: null,
       assumptions: [],
+      labeled_email_action: null,
       insights: [{ kind: "INFORMATION", title: "Requested time", detail: "Monday morning", event_refs: ["unknown-ref"] }],
       alternatives: [{
         title: "Protect 10–11",
@@ -164,6 +174,7 @@ describe("v2 read-only assistant", () => {
       summary: "The requested hour is free.",
       clarification_question: null,
       assumptions: [],
+      labeled_email_action: null,
       insights: [],
       alternatives: [{
         title: "Protect 2–3 PM",

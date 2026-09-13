@@ -151,6 +151,17 @@ export interface CalendarAction extends BaseAction {
     original_title: string;
     organizer_email: string;
   };
+  reschedule_owned?: {
+    event_ref: string;
+    source_calendar: "PRIMARY" | "SELECTED";
+    original_title: string;
+    expected_version: string;
+  };
+  email_request?: {
+    message_ref: string;
+    sender_email: string;
+    subject: string;
+  };
 }
 
 export interface MailAction extends BaseAction {

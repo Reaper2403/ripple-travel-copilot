@@ -47,7 +47,8 @@ export function exactManifestView(proposal: PublicProposal, profile: OnboardingP
       start: dateTime(action.start_at, action.timezone),
       end: new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit", timeZone: action.timezone }).format(new Date(action.end_at)),
       timezone: action.timezone,
-      attendees: action.proposal_for ? [action.proposal_for.organizer_email] : [],
+      attendees: action.proposal_for ? [action.proposal_for.organizer_email] : action.email_request ? [action.email_request.sender_email] : [],
+      change: action.reschedule_owned ? "Move the existing event and clear its original time" : action.proposal_for ? "Send a separate proposed-time invitation" : "Create a new calendar event",
     };
     return {
       id: action.action_id,

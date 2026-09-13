@@ -29,7 +29,7 @@ The attached Screen 5 is therefore not a decorative completion screen. It is the
 - Read-only schedule analysis for conflicts, tight transitions, missing preparation time, travel buffers, and candidate focus/meeting windows.
 - One to three structured options with assumptions, trade-offs, and affected commitments.
 - A persisted, versioned proposal and exact action confirmation card.
-- Safe creation of new Ripple-owned Calendar holds/blocks.
+- Safe creation of new Ripple-owned Calendar holds/blocks and confirmation-gated moves of meetings the operator owns.
 - A real Notion follow-through tracker with actions, owners, deadlines, and status.
 - Gmail sending only for disruption workflows where recipients, subject, and full message are previewed.
 - Real rejection, stale-plan handling, provider receipts, replay protection, and resettable demo data.
@@ -38,13 +38,13 @@ The attached Screen 5 is therefore not a decorative completion screen. It is the
 
 - Self-service multi-user Google OAuth, account switching, and token lifecycle UI.
 - Public Notion OAuth and arbitrary workspace installation.
-- Moving, cancelling, or editing existing meetings.
+- Cancelling or editing meetings the operator does not own; arbitrary bulk rescheduling.
 - Natural-language-only approval such as “yes” or “do it.”
 - Arbitrary tool use, inferred recipients, automatic invitations, travel purchasing, or rebooking.
 - Notion databases, two-way status sync, webhooks, and arbitrary customer schemas.
 - Durable cloud Gmail push workers and enterprise administration.
 
-The narrow write scope is intentional: v2 can analyze an existing meeting and recommend a manual change, but its general scheduling action is creating a new Ripple-owned block. This keeps the assistant useful while preserving a demoable safety boundary.
+The narrow write scope is intentional: v2 may move the original event only when Google confirms the operator is its organizer and the reviewed event version is still current. Otherwise Ripple creates a separate hold or proposed-time invitation and leaves the source meeting untouched.
 
 ## 3. Integration strategy
 
@@ -65,7 +65,7 @@ The assistant supports a constrained intent catalog:
 - prepare or summarize the week;
 - identify conflicts, tight transitions, missing preparation time, and travel buffers;
 - find candidate windows under explicit duration, timezone, working-hours, and buffer constraints;
-- review a labeled travel disruption;
+- review the latest bounded set of labeled assistant-inbox messages, including travel changes, meeting requests, deadlines, and commitments;
 - propose a preparation, focus, recovery, or travel hold;
 - propose a new time for a conflicting meeting the executive does not own by creating a separate, confirmation-gated Calendar invitation to its organizer;
 - create a Notion follow-through checklist;
@@ -89,7 +89,9 @@ Question
 
 Chat can explore freely but cannot authorize side effects. Selecting an option or typing “yes” only opens the confirmation card.
 
-Ripple reads both the primary and selected executive calendars for conflict analysis but writes only to the selected calendar. A proposed-time invitation leaves the organizer's original event untouched. If that original event is cancelled or its organizer changes before execution, the reviewed proposal becomes invalid and no invitation is sent.
+Ripple reads both the primary and selected executive calendars for conflict analysis. New holds are written only to the selected calendar. For an operator-owned event, a confirmed reschedule updates that same event on its source calendar, clears the old time, preserves its details, and notifies existing attendees. A proposed-time invitation for a non-owned meeting leaves the organizer's original event untouched. Any ownership, organizer, version, cancellation, or calendar change invalidates the reviewed proposal before execution.
+
+`RIPPLE/READY` is a curation boundary rather than an execution trigger. During weekly preparation Ripple classifies the highest-priority actionable labeled message, proposes free time when its constraints are sufficiently clear, and asks one clarification otherwise. Meeting invitations, commitment holds, and Notion follow-through remain confirmation-gated.
 
 ## 5. Notion utility: executive follow-through workspace
 

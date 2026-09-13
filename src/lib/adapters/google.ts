@@ -59,7 +59,7 @@ export class GoogleMailAdapter implements MailReaderPort, MailWriterPort {
         thread_id: result.data.threadId ?? message_id,
         source_version: result.data.historyId ?? hash(result.data),
         received_at: new Date(Number(result.data.internalDate ?? Date.now())).toISOString(),
-        from: headers.from ?? "",
+        from: headers["reply-to"] || headers.from || "",
         subject: headers.subject ?? "",
         body_text: plainBody(result.data.payload ?? {}),
       };
@@ -151,12 +151,18 @@ export class GoogleCalendarAdapter implements CalendarReaderPort, CalendarWriter
     validateContext(context);
     try {
       const calendar = google.calendar({ version: "v3", auth: oauth(this.config) });
-      const requestBody = {
-        summary: action.title, description: action.description, start: { dateTime: action.start_at, timeZone: action.timezone },
-        end: { dateTime: action.end_at, timeZone: action.timezone },
-        ...(action.proposal_for ? { attendees: [{ email: action.proposal_for.organizer_email }] } : {}),
-        extendedProperties: { private: { ripple_case_id: context.case_id, ripple_action_id: context.action_id } },
-      };
+      const emailInvitee = action.email_request?.sender_email.toLowerCase() === this.config.RIPPLE_OPERATOR_EMAIL.toLowerCase() ? undefined : action.email_request?.sender_email;
+      const invitee = action.proposal_for?.organizer_email ?? emailInvitee;
+      let targetCalendarId = this.config.GOOGLE_CALENDAR_ID;
+      let ownedSource: calendar_v3.Schema$Event | undefined;
+      if (action.reschedule_owned) {
+        targetCalendarId = action.reschedule_owned.source_calendar === "PRIMARY" ? "primary" : this.config.GOOGLE_CALENDAR_ID;
+        const source = await calendar.events.get({ calendarId: targetCalendarId, eventId: action.reschedule_owned.event_ref });
+        ownedSource = source.data;
+        if (ownedSource.status === "cancelled") throw new AdapterError({ category: "CONFLICT", retryable: false, safe_message: "The meeting was cancelled before Ripple could move it." });
+        if (!ownedSource.organizer?.self) throw new AdapterError({ category: "VALIDATION", retryable: false, safe_message: "Ripple can only move an existing meeting when you are its organizer." });
+        if (action.reschedule_owned.expected_version !== "unknown" && ownedSource.etag !== action.reschedule_owned.expected_version) throw new AdapterError({ category: "CONFLICT", retryable: false, safe_message: "The meeting changed after review. Ask Ripple to refresh the proposal." });
+      }
       if (action.proposal_for) {
         const sourceCalendarId = action.proposal_for.source_calendar === "PRIMARY" ? "primary" : this.config.GOOGLE_CALENDAR_ID;
         const source = await calendar.events.get({ calendarId: sourceCalendarId, eventId: action.proposal_for.event_ref });
@@ -165,8 +171,15 @@ export class GoogleCalendarAdapter implements CalendarReaderPort, CalendarWriter
         if (organizer?.self) throw new AdapterError({ category: "VALIDATION", retryable: false, safe_message: "This meeting is owned by you and does not require a guest proposal." });
         if (!organizer?.email || organizer.email.toLowerCase() !== action.proposal_for.organizer_email.toLowerCase()) throw new AdapterError({ category: "CONFLICT", retryable: false, safe_message: "The meeting organizer changed. Review the proposal again before sending it." });
       }
-      let eventId = action.event_ref;
-      let beforeHash: string | null = null;
+      const requestBody = {
+        ...(action.reschedule_owned ? {} : { summary: action.title, description: action.description }),
+        start: { dateTime: action.start_at, timeZone: action.timezone },
+        end: { dateTime: action.end_at, timeZone: action.timezone },
+        ...(invitee ? { attendees: [{ email: invitee }] } : {}),
+        extendedProperties: { private: { ...(ownedSource?.extendedProperties?.private ?? {}), ripple_case_id: context.case_id, ripple_action_id: context.action_id } },
+      };
+      let eventId = action.reschedule_owned?.event_ref ?? action.event_ref;
+      let beforeHash: string | null = ownedSource ? hash(ownedSource) : null;
       if (!eventId) {
         const existing = await calendar.events.list({
           calendarId: this.config.GOOGLE_CALENDAR_ID,
@@ -177,13 +190,19 @@ export class GoogleCalendarAdapter implements CalendarReaderPort, CalendarWriter
         eventId = existing.data.items?.[0]?.id ?? undefined;
         if (eventId) beforeHash = hash(existing.data.items?.[0]);
       }
+      const notifyAttendees = Boolean(action.reschedule_owned && ownedSource?.attendees?.length);
       const result = eventId
-        ? await calendar.events.patch({ calendarId: this.config.GOOGLE_CALENDAR_ID, eventId, sendUpdates: "none", requestBody })
-        : await calendar.events.insert({ calendarId: this.config.GOOGLE_CALENDAR_ID, sendUpdates: action.proposal_for ? "all" : "none", requestBody });
+        ? await calendar.events.patch({ calendarId: targetCalendarId, eventId, sendUpdates: notifyAttendees ? "all" : "none", requestBody })
+        : await calendar.events.insert({ calendarId: this.config.GOOGLE_CALENDAR_ID, sendUpdates: invitee ? "all" : "none", requestBody });
       const providerRef = result.data.id ?? eventId ?? action.action_id;
-      const verified = await calendar.events.get({ calendarId: this.config.GOOGLE_CALENDAR_ID, eventId: providerRef });
+      const verified = await calendar.events.get({ calendarId: targetCalendarId, eventId: providerRef });
       const metadata = verified.data.extendedProperties?.private;
-      const isVerified = verified.data.id === providerRef && metadata?.ripple_action_id === context.action_id && metadata?.ripple_case_id === context.case_id;
+      const timeVerified = !action.reschedule_owned || (
+        verified.data.start?.dateTime && verified.data.end?.dateTime
+        && new Date(verified.data.start.dateTime).toISOString() === new Date(action.start_at).toISOString()
+        && new Date(verified.data.end.dateTime).toISOString() === new Date(action.end_at).toISOString()
+      );
+      const isVerified = Boolean(verified.data.id === providerRef && metadata?.ripple_action_id === context.action_id && metadata?.ripple_case_id === context.case_id && timeVerified);
       return { outcome: "SUCCEEDED", provider_ref: providerRef, provider_version: verified.data.etag ?? "unknown", external_url: safeCalendarUrl(verified.data.htmlLink), verified: isVerified, before_hash: beforeHash, after_hash: hash(action), completed_at: new Date().toISOString() };
     } catch (error) { throw normalizeError(error); }
   }

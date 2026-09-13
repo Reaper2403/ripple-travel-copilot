@@ -19,6 +19,8 @@ function manifestFor(proposal: SchedulingProposal, alternativeId: string, now: D
   const trackerActionId = `tracker-${hash(`${proposal.proposal_id}:${alternativeId}`).slice(0, 20)}`;
   const calendarActionId = `calendar-${hash(`${alternativeId}:${proposal.version}`).slice(0, 20)}`;
   const proposedTime = proposal.target_event;
+  const labeledEmail = proposal.labeled_email_action;
+  const emailMeeting = labeledEmail && ["MEETING_REQUEST", "RESCHEDULE"].includes(labeledEmail.kind) ? labeledEmail : undefined;
   const tracker: FollowThroughTrackerAction = {
     type: "NOTION_TRACKER_UPSERT", action_id: trackerActionId, idempotency_key: hash(`${proposal.proposal_id}:${trackerActionId}`), required: true,
     title: `Ripple · ${proposal.title}`.slice(0, 200), executive_summary: `${proposal.summary} Chosen plan: ${alternative.summary}`,
@@ -28,7 +30,7 @@ function manifestFor(proposal: SchedulingProposal, alternativeId: string, now: D
     affected_commitments: proposal.insights.filter((insight) => insight.event_refs.length).slice(0, 5).map((insight) => ({ title: insight.title, time_label: "Within the reviewed schedule window", owner_label: "Calendar owner", impact: insight.detail, chosen_response: alternative.summary })),
     decisions: [
       { decision: alternative.title, decided_at: now.toISOString() },
-      { decision: proposedTime ? `Send ${proposedTime.organizer_email} a proposed-time calendar invitation; keep the original invitation unchanged until the organizer responds.` : "Existing meetings remain unchanged; review or move them manually if needed.", decided_at: now.toISOString() },
+      { decision: proposedTime?.owned_by_operator ? `Move the existing ${proposedTime.title} event and clear its original time after confirmation.` : proposedTime ? `Send ${proposedTime.organizer_email} a proposed-time calendar invitation; keep the original invitation unchanged until the organizer responds.` : emailMeeting ? `Send ${emailMeeting.sender_email} a calendar invitation only after this exact plan is confirmed.` : "Existing meetings remain unchanged; review or move them manually if needed.", decided_at: now.toISOString() },
     ],
     tasks: [
       { task_id: hash(`${proposal.proposal_id}:prepare`).slice(0, 16), title: "Prepare for the protected session", owner_label: "Executive", due_at: alternative.candidate_block.start_at, timezone: alternative.candidate_block.timezone, status: "NOT_STARTED", source_action_id: trackerActionId },
@@ -37,10 +39,11 @@ function manifestFor(proposal: SchedulingProposal, alternativeId: string, now: D
   };
   const calendar: CalendarAction = {
     type: "CALENDAR_HOLD_UPSERT", action_id: calendarActionId, idempotency_key: hash(`${proposal.proposal_id}:${calendarActionId}`), required: true,
-    title: proposedTime ? `Proposed time · ${proposedTime.title}` : alternative.candidate_block.title,
-    description: proposedTime ? `Could we move ${proposedTime.title} to this time? Please accept if it works, or suggest another time. The original invitation remains unchanged.` : "Created by Ripple after explicit confirmation.",
+    title: proposedTime?.owned_by_operator ? proposedTime.title : proposedTime ? `Proposed time · ${proposedTime.title}` : labeledEmail ? labeledEmail.title : alternative.candidate_block.title,
+    ...(proposedTime?.owned_by_operator ? {} : { description: proposedTime ? `Could we move ${proposedTime.title} to this time? Please accept if it works, or suggest another time. The original invitation remains unchanged.` : emailMeeting ? `Proposed in response to “${emailMeeting.subject}”. Please accept if this time works, or suggest another.` : labeledEmail ? `Protected by Ripple in response to “${labeledEmail.subject}” after explicit confirmation.` : "Created by Ripple after explicit confirmation." }),
     start_at: alternative.candidate_block.start_at, end_at: alternative.candidate_block.end_at, timezone: alternative.candidate_block.timezone,
-    ...(proposedTime ? { proposal_for: { event_ref: proposedTime.event_ref, source_calendar: proposedTime.source_calendar, original_title: proposedTime.title, organizer_email: proposedTime.organizer_email } } : {}),
+    ...(proposedTime?.owned_by_operator ? { reschedule_owned: { event_ref: proposedTime.event_ref, source_calendar: proposedTime.source_calendar, original_title: proposedTime.title, expected_version: proposedTime.provider_version ?? "unknown" } } : proposedTime?.organizer_email ? { proposal_for: { event_ref: proposedTime.event_ref, source_calendar: proposedTime.source_calendar, original_title: proposedTime.title, organizer_email: proposedTime.organizer_email } } : {}),
+    ...(emailMeeting ? { email_request: { message_ref: emailMeeting.message_ref, sender_email: emailMeeting.sender_email, subject: emailMeeting.subject } } : {}),
   };
   const unsigned = { schema_version: "1.0" as const, case_id: proposal.proposal_id, case_version: proposal.version + 1, plan_id: alternativeId, actions: [tracker, calendar] };
   const manifest = { ...unsigned, manifest_hash: hash(unsigned) };

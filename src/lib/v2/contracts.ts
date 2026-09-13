@@ -100,9 +100,24 @@ const proposalTargetSchema = z.object({
   event_ref: z.string().min(1),
   source_calendar: z.enum(["PRIMARY", "SELECTED"]),
   title: z.string().min(1),
-  organizer_email: z.string().email(),
+  organizer_email: z.string().email().optional(),
+  owned_by_operator: z.boolean().default(false),
+  provider_version: z.string().min(1).optional(),
   start_at: z.string().datetime(),
   end_at: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  if (!value.owned_by_operator && !value.organizer_email) context.addIssue({ code: z.ZodIssueCode.custom, message: "A non-owned meeting requires its organizer." });
+});
+
+const labeledEmailActionSchema = z.object({
+  message_ref: z.string().min(1),
+  sender_email: z.string().email(),
+  subject: z.string().min(1),
+  kind: z.enum(["MEETING_REQUEST", "DEADLINE", "COMMITMENT", "RESCHEDULE", "CANCELLATION", "FYI"]),
+  title: z.string().min(1),
+  duration_minutes: z.number().int().min(15).max(240).nullable(),
+  constraints_summary: z.string().min(1),
+  importance: z.enum(["HIGH", "MEDIUM", "LOW"]),
 }).strict();
 
 export const followThroughTaskSchema = z.object({
@@ -114,7 +129,7 @@ export const followThroughTaskSchema = z.object({
 const baseActionFields = { action_id: z.string().min(1), idempotency_key: z.string().min(1), required: z.boolean() };
 export const v2PlannedActionSchema = z.discriminatedUnion("type", [
   z.object({ ...baseActionFields, type: z.literal("NOTION_TRACKER_UPSERT"), title: z.string().min(1), executive_summary: z.string().min(1), decision_at: z.string().datetime(), status: z.enum(["PLANNED", "IN_PROGRESS", "COMPLETED", "BLOCKED"]), chosen_decision: z.string().min(1), impact: z.string().min(1), next_deadline: z.string().datetime().optional(), last_updated_at: z.string().datetime(), affected_commitments: z.array(z.object({ title: z.string().min(1), time_label: z.string().min(1), owner_label: z.string().min(1), impact: z.string().min(1), chosen_response: z.string().min(1) }).strict()), decisions: z.array(z.object({ decision: z.string().min(1), decided_at: z.string().datetime() }).strict()).min(1), tasks: z.array(followThroughTaskSchema).min(1) }).strict(),
-  z.object({ ...baseActionFields, type: z.literal("CALENDAR_HOLD_UPSERT"), title: z.string().min(1), description: z.string().optional(), start_at: z.string().datetime(), end_at: z.string().datetime(), timezone: z.string().min(1), proposal_for: z.object({ event_ref: z.string().min(1), source_calendar: z.enum(["PRIMARY", "SELECTED"]), original_title: z.string().min(1), organizer_email: z.string().email() }).strict().optional() }).strict(),
+  z.object({ ...baseActionFields, type: z.literal("CALENDAR_HOLD_UPSERT"), title: z.string().min(1), description: z.string().optional(), start_at: z.string().datetime(), end_at: z.string().datetime(), timezone: z.string().min(1), proposal_for: z.object({ event_ref: z.string().min(1), source_calendar: z.enum(["PRIMARY", "SELECTED"]), original_title: z.string().min(1), organizer_email: z.string().email() }).strict().optional(), reschedule_owned: z.object({ event_ref: z.string().min(1), source_calendar: z.enum(["PRIMARY", "SELECTED"]), original_title: z.string().min(1), expected_version: z.string().min(1) }).strict().optional(), email_request: z.object({ message_ref: z.string().min(1), sender_email: z.string().email(), subject: z.string().min(1) }).strict().optional() }).strict(),
   z.object({ ...baseActionFields, type: z.literal("MAIL_SEND"), to: z.array(z.string().email()).min(1), cc: z.array(z.string().email()), bcc: z.array(z.string().email()).max(0), subject: z.string().min(1), body_text: z.string().min(1) }).strict(),
 ]);
 export const v2ActionManifestSchema = z.object({
@@ -128,6 +143,7 @@ export const v2ActionManifestSchema = z.object({
     if (Date.parse(action.end_at) <= Date.parse(action.start_at)) context.addIssue({ code: z.ZodIssueCode.custom, message: "Calendar action must end after it starts." });
     try { new Intl.DateTimeFormat("en", { timeZone: action.timezone }).format(); }
     catch { context.addIssue({ code: z.ZodIssueCode.custom, message: "Calendar action timezone is invalid." }); }
+    if (action.proposal_for && action.reschedule_owned) context.addIssue({ code: z.ZodIssueCode.custom, message: "A Calendar action cannot both move an owned event and propose a time to another organizer." });
   }
 });
 
@@ -144,6 +160,7 @@ const schedulingProposalPublicShape = {
   insights: z.array(z.object({ kind: z.enum(["CONFLICT", "TIGHT_TRANSITION", "MISSING_PREP", "OPEN_WINDOW", "RECENT_CHANGE", "INFORMATION"]), title: z.string().min(1), detail: z.string().min(1), event_refs: z.array(z.string()) }).strict()),
   alternatives: z.array(proposalAlternativeSchema).max(3),
   target_event: proposalTargetSchema.optional(),
+  labeled_email_action: labeledEmailActionSchema.optional(),
   selected_alternative_id: z.string().uuid().optional(),
   manifest: v2ActionManifestSchema.optional(),
   calendar_snapshot_hash: z.string().regex(/^[a-f0-9]{64}$/),

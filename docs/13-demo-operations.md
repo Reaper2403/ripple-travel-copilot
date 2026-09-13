@@ -35,13 +35,17 @@ Use a native Gmail filter so Ripple keeps least-privilege read/send OAuth:
 
 1. Open Gmail on a computer.
 2. In the search box, open **Show search options**.
-3. Put `[RIPPLE TEST] Flight NS 442 cancelled` in **Subject**.
+3. Put `[RIPPLE TEST]` in **Subject**. This intentionally covers only synthetic hackathon messages.
 4. Select **Create filter**.
 5. Select **Apply the label** and choose `RIPPLE/READY`.
 6. Optionally select **Also apply filter to matching conversations**.
 7. Create the filter.
 
-For broader synthetic testing, use a stable sender plus the `[RIPPLE TEST]` subject prefix. Do not build a broad production filter around the word “cancelled”; it will create noisy and unsafe triggers.
+This lets both the cancellation fixture and synthetic meeting-request emails enter Ripple's bounded assistant inbox. Do not build a broad production filter around words such as “cancelled” or “meeting”; it will create noisy and unsafe triggers.
+
+When the executive asks **Prepare my week** or **Review recent changes**, Ripple reads at most five messages carrying the configured label. It shares only the sender/reply address, subject, received time, and a sanitized 1,200-character plain-text excerpt with the planner. Labeling is permission to consider a message, never permission to send an invitation; Calendar and Notion writes still require the exact confirmation screen.
+
+For rescheduling, Ripple updates the original Calendar event only when the connected account is its organizer and the event version still matches the reviewed proposal. This clears the old block rather than creating a duplicate. Meetings owned by somebody else keep the separate proposed-time invitation flow and their original invitation remains unchanged.
 
 Official Gmail filter instructions: <https://support.google.com/mail/answer/6579>
 

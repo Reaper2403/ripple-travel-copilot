@@ -69,7 +69,7 @@ export class ConversationService {
     const snapshot = privacyFilteredSnapshot(providerSnapshot);
     if (!snapshot.complete) throw new DomainError("Ripple could not safely inspect the complete schedule window.", "PROVIDER_FAILURE");
     const notices: SafeRecentNotice[] = [];
-    if (intent === "REVIEW_RECENT_CHANGES") {
+    if (intent === "REVIEW_RECENT_CHANGES" || intent === "PREPARE_WEEK") {
       const config = getServerConfig();
       const scanned = await context.mail.scan({ label: config.GMAIL_INGEST_LABEL, limit: 5 });
       for (const messageId of scanned.message_ids.slice(0, 5)) {

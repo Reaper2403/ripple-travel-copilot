@@ -21,6 +21,7 @@ const event = (seedId, summary, start, end, options = {}) => ({ seedId, summary,
 export const executiveWeek = [
   event("monday-staff-briefing", "[RIPPLE DEMO] Executive staff briefing", "2026-09-14T07:00:00.000Z", "2026-09-14T07:45:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1] }),
   event("monday-board-prep", "[RIPPLE DEMO] Board preparation", "2026-09-14T08:30:00.000Z", "2026-09-14T09:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [1, 2] }),
+  event("monday-conflict-hiring", "[RIPPLE DEMO] Leadership hiring review", "2026-09-14T09:00:00.000Z", "2026-09-14T10:00:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 2] }),
   event("monday-investor-call", "[RIPPLE DEMO] Investor update", "2026-09-14T15:30:00.000Z", "2026-09-14T16:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0] }),
   event("investor-dinner", "[RIPPLE DEMO] Investor dinner", "2026-09-14T17:00:00.000Z", "2026-09-14T18:00:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1] }),
   event("team-launch-review", "[RIPPLE DEMO] Team launch review", "2026-09-16T15:30:00.000Z", "2026-09-16T16:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [1, 2] }),
@@ -30,6 +31,7 @@ export const executiveWeek = [
   event("tuesday-product-review", "[RIPPLE DEMO] Product operating review", "2026-09-15T11:30:00.000Z", "2026-09-15T12:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [1, 2] }),
   event("tuesday-transparent-travel", "[RIPPLE DEMO] Optional travel research", "2026-09-16T12:00:00.000Z", "2026-09-16T13:00:00.000Z", { timeZone: "Europe/Berlin", transparency: "transparent" }),
   event("wednesday-all-day-offsite", "[RIPPLE DEMO] Board offsite", "2026-09-16T08:30:00.000Z", "2026-09-16T10:00:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1, 2] }),
+  event("wednesday-conflict-launch", "[RIPPLE DEMO] Product launch checkpoint", "2026-09-16T09:30:00.000Z", "2026-09-16T10:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [1, 2] }),
   event("wednesday-asia-call", "[RIPPLE DEMO] APAC partner call", "2026-09-16T15:00:00+08:00", "2026-09-16T16:00:00+08:00", { timeZone: "Asia/Singapore", attendeeIndexes: [2] }),
   event("wednesday-committee", "[RIPPLE DEMO] Risk committee", "2026-09-17T13:30:00.000Z", "2026-09-17T14:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1] }),
   event("thursday-standup", "[RIPPLE DEMO] Executive standup", "2026-09-17T07:30:00.000Z", "2026-09-17T08:00:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1, 2] }),
@@ -37,6 +39,7 @@ export const executiveWeek = [
   event("thursday-press-prep", "[RIPPLE DEMO] Press preparation", "2026-09-17T12:00:00.000Z", "2026-09-17T13:00:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 2] }),
   event("friday-standup", "[RIPPLE DEMO] Executive standup", "2026-09-18T07:00:00.000Z", "2026-09-18T07:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1, 2] }),
   event("friday-earnings-prep", "[RIPPLE DEMO] Earnings preparation", "2026-09-18T08:30:00.000Z", "2026-09-18T10:00:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 1] }),
+  event("friday-conflict-contract", "[RIPPLE DEMO] Partner contract review", "2026-09-18T09:30:00.000Z", "2026-09-18T10:30:00.000Z", { timeZone: "Europe/Berlin", attendeeIndexes: [0, 2] }),
   event("friday-focus-block", "[RIPPLE DEMO] Protected focus block", "2026-09-18T12:00:00.000Z", "2026-09-18T14:00:00.000Z", { timeZone: "Europe/Berlin" }),
 ];
 

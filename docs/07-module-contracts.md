@@ -138,11 +138,13 @@ Adapters must reject a missing or malformed context even if the provider would a
 The ordered actions use exactly these types for P0:
 
 - `ARTIFACT_UPSERT`: canonical titled sections and optional app-owned document reference.
-- `CALENDAR_HOLD_UPSERT`: UTC interval, IANA timezone, title, description, private metadata, expected ETag when updating.
+- `CALENDAR_HOLD_UPSERT`: UTC interval, IANA timezone, title, description, private metadata, expected ETag when updating. An optional `proposal_for` contract identifies a non-owned source event and its organizer; execution creates a separate invitation on the selected calendar and never edits the source event.
 - `CALENDAR_LINK_BRIEF`: app-owned event and artifact references, expected ETag.
 - `MAIL_SEND`: explicit `to`/`cc`/`bcc` (BCC normally empty), subject, canonical plain body, optional thread reference.
 
 The planner assigns stable action IDs before review. The executor may skip an optional action only when the manifest encodes that condition; it may never synthesize a new action.
+
+Calendar reads merge the authenticated account's primary calendar with the explicitly selected executive calendar. Occurrences are deduplicated by iCalendar identity and start time. Cancelled, declined, transparent, and untimed entries do not consume availability. Writes remain restricted to the selected executive calendar.
 
 ## Provider result and error contract
 

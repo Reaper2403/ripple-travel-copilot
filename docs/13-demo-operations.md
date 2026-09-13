@@ -15,6 +15,8 @@ npm run seed:demo
 
 This ensures 19 clearly prefixed Calendar events and one synthetic Gmail disruption source. It is idempotent and suppresses Calendar invitation notifications.
 
+The seeded week is intentionally balanced across Monday-Friday (4/4/4/4/3 events). Berlin-based internal work sits mainly in the morning and early afternoon, while investor, customer, and US-facing reviews use late-afternoon Berlin slots that overlap Pacific working hours. The gaps are deliberate: preserve them for preparation, overruns, and last-minute changes instead of packing the calendar edge-to-edge.
+
 ```bash
 npm run fixtures:watch
 ```

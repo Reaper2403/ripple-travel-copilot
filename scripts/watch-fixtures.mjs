@@ -7,7 +7,7 @@ async function maintain() {
   try {
     const calendar = await ensureCalendarFixtures({ quiet: true });
     const gmail = await ensureGmailFixture({ quiet: true });
-    console.log(`${new Date().toISOString()} READY ${calendar.total} Calendar fixtures; ${calendar.created + gmail.created} repaired`);
+    console.log(`${new Date().toISOString()} READY ${calendar.total} Calendar fixtures; ${calendar.created + gmail.created} created, ${calendar.updated} rescheduled`);
   } catch {
     console.error(`${new Date().toISOString()} FAILED fixture maintenance; credentials or provider availability require attention`);
   }

@@ -27,7 +27,9 @@ describe("public repository hygiene", () => {
   it("does not expose secret-shaped assignments or real personal identities", () => {
     // Newlines are deliberately excluded so a blank example assignment cannot
     // consume the next line. Angle-bracket placeholders are public documentation.
-    const personalIdentity = /(?:gmail\.com|yahoo\.com|outlook\.com|hotmail\.com)/i;
+    // Match an address, not an OAuth scope or documentation URL whose host is
+    // one of these providers (for example https://mail.google.com/).
+    const personalIdentity = /[a-z0-9._%+-]+@(?:gmail\.com|yahoo\.com|outlook\.com|hotmail\.com)/i;
     const protectedKey = /(?:API_KEY|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|SESSION_SECRET|ENCRYPTION_KEY)[ \t]*=/i;
     const offenders: string[] = [];
     const candidates = publicFiles().filter((name) => /\.(?:ts|tsx|js|json|md|txt|example|gitignore)$/.test(name) || name.startsWith(".env.example"));

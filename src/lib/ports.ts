@@ -1,5 +1,6 @@
 import type {
   ArtifactAction,
+  FollowThroughTrackerAction,
   CalendarAction,
   CalendarSnapshot,
   DisruptionFacts,
@@ -26,6 +27,7 @@ export interface PlannerPort {
 }
 export interface ArtifactPort {
   upsert_case_brief(context: WriteContext, action: ArtifactAction): Promise<ProviderWriteResult>;
+  upsert_tracker(context: WriteContext, action: FollowThroughTrackerAction): Promise<ProviderWriteResult>;
 }
 export interface CalendarWriterPort {
   apply(context: WriteContext, action: CalendarAction): Promise<ProviderWriteResult>;

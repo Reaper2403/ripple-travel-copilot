@@ -63,6 +63,7 @@ export interface DisruptionFacts {
 
 export interface CalendarEventSnapshot {
   event_ref: string;
+  source_calendar?: "PRIMARY" | "SELECTED";
   provider_version: string;
   title: string;
   start_at: string;
@@ -107,6 +108,34 @@ export interface ArtifactAction extends BaseAction {
   expected_version?: string;
 }
 
+export interface FollowThroughTask {
+  task_id: string;
+  title: string;
+  owner_label: string;
+  owner_email?: string;
+  due_at?: string;
+  timezone?: string;
+  status: "NOT_STARTED" | "IN_PROGRESS" | "BLOCKED" | "DONE";
+  source_action_id: string;
+}
+
+export interface FollowThroughTrackerAction extends BaseAction {
+  type: "NOTION_TRACKER_UPSERT";
+  title: string;
+  executive_summary: string;
+  decision_at: string;
+  status: "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED";
+  chosen_decision: string;
+  impact: string;
+  next_deadline?: string;
+  last_updated_at: string;
+  affected_commitments: Array<{ title: string; time_label: string; owner_label: string; impact: string; chosen_response: string }>;
+  decisions: Array<{ decision: string; decided_at: string }>;
+  tasks: FollowThroughTask[];
+  page_ref?: string;
+  expected_version?: string;
+}
+
 export interface CalendarAction extends BaseAction {
   type: "CALENDAR_HOLD_UPSERT" | "CALENDAR_LINK_BRIEF";
   event_ref?: string;
@@ -116,6 +145,12 @@ export interface CalendarAction extends BaseAction {
   start_at: string;
   end_at: string;
   timezone: string;
+  proposal_for?: {
+    event_ref: string;
+    source_calendar: "PRIMARY" | "SELECTED";
+    original_title: string;
+    organizer_email: string;
+  };
 }
 
 export interface MailAction extends BaseAction {
@@ -128,7 +163,7 @@ export interface MailAction extends BaseAction {
   body_text: string;
 }
 
-export type PlannedAction = ArtifactAction | CalendarAction | MailAction;
+export type PlannedAction = ArtifactAction | FollowThroughTrackerAction | CalendarAction | MailAction;
 
 export interface ActionManifest {
   schema_version: "1.0";
@@ -187,6 +222,7 @@ export interface ProviderWriteResult {
   before_hash: string | null;
   after_hash: string;
   completed_at: string;
+  external_url?: string;
 }
 
 export interface ProviderError {
@@ -211,6 +247,7 @@ export interface ExecutionReceipt {
   request_fingerprint: string;
   provider_ref?: string;
   provider_version?: string;
+  external_url?: string;
   verified?: boolean;
   before_hash?: string | null;
   after_hash?: string | null;

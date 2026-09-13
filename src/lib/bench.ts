@@ -85,6 +85,7 @@ export async function runBench(): Promise<BenchResponse> {
     try {
       attempted.push(action.type);
       if (action.type === "ARTIFACT_UPSERT") await notionFailure.artifact_writer.upsert_case_brief(context(action.action_id), action);
+      else if (action.type === "NOTION_TRACKER_UPSERT") await notionFailure.artifact_writer.upsert_tracker(context(action.action_id), action);
       else if (action.type === "MAIL_SEND") await notionFailure.mail_writer.send(context(action.action_id), action);
       else await notionFailure.calendar_writer.apply(context(action.action_id), action);
     } catch { break; }
@@ -113,6 +114,7 @@ export async function runBench(): Promise<BenchResponse> {
     let captured: AdapterError | undefined;
     try {
       if (action.type === "ARTIFACT_UPSERT") await faulty.artifact_writer.upsert_case_brief(context(action.action_id), action);
+      else if (action.type === "NOTION_TRACKER_UPSERT") await faulty.artifact_writer.upsert_tracker(context(action.action_id), action);
       else if (action.type === "MAIL_SEND") await faulty.mail_writer.send(context(action.action_id), action);
       else await faulty.calendar_writer.apply(context(action.action_id), action);
     } catch (error) { if (error instanceof AdapterError) captured = error; }

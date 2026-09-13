@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="620" viewBox="0 0 1440 620" role="img" aria-labelledby="title desc">
+  <title id="title">Ripple onboarding v2 screen flow</title>
+  <desc id="desc">Five setup steps progress from account creation through Gmail, Google Calendar and Notion connection into the active assistant workspace. Loading stays in context, errors remain on the current step and success advances.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#171a22" flood-opacity=".09"/></filter>
+    <linearGradient id="line" x1="0" x2="1"><stop stop-color="#4a5ccf"/><stop offset="1" stop-color="#8d98df"/></linearGradient>
+    <style>
+      .sans{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.title{font-size:42px;font-weight:680;letter-spacing:-2px;fill:#171a22}.sub{font-size:15px;fill:#666c79}.step{font-size:11px;font-weight:800;letter-spacing:1.2px;fill:#4a5ccf}.name{font-size:18px;font-weight:700;fill:#171a22}.detail{font-size:12px;fill:#7c818e}.node{fill:#fff;stroke:#e3e5eb}.chip{font-size:11px;font-weight:650;fill:#666c79}.legend{font-size:11px;fill:#666c79}
+    </style>
+  </defs>
+  <rect width="1440" height="620" fill="#f4f5f8"/>
+  <text x="100" y="100" class="sans step">RIPPLE · ONBOARDING V2</text>
+  <text x="100" y="152" class="sans title">From first hello to first useful action</text>
+  <text x="100" y="183" class="sans sub">A five-step setup that explains value before access and lands inside the product.</text>
+  <path d="M214 322H1224" stroke="url(#line)" stroke-width="4" stroke-linecap="round"/>
+
+  <g filter="url(#shadow)">
+    <g transform="translate(100 250)"><rect class="node" width="230" height="160" rx="18"/><circle cx="114" cy="72" r="30" fill="#4a5ccf" stroke="#fff" stroke-width="8"/><text x="114" y="77" text-anchor="middle" class="sans" font-size="13" font-weight="800" fill="#fff">01</text><text x="22" y="122" class="sans name">Create your space</text><text x="22" y="144" class="sans detail">Name + work email</text></g>
+    <g transform="translate(352 250)"><rect class="node" width="230" height="160" rx="18"/><circle cx="114" cy="72" r="30" fill="#4a5ccf" stroke="#fff" stroke-width="8"/><text x="114" y="77" text-anchor="middle" class="sans" font-size="13" font-weight="800" fill="#fff">02</text><text x="22" y="122" class="sans name">Connect Gmail</text><text x="22" y="144" class="sans detail">Read relevant notices</text></g>
+    <g transform="translate(604 250)"><rect class="node" width="230" height="160" rx="18"/><circle cx="114" cy="72" r="30" fill="#4a5ccf" stroke="#fff" stroke-width="8"/><text x="114" y="77" text-anchor="middle" class="sans" font-size="13" font-weight="800" fill="#fff">03</text><text x="22" y="122" class="sans name">Connect Calendar</text><text x="22" y="144" class="sans detail">Understand schedule impact</text></g>
+    <g transform="translate(856 250)"><rect class="node" width="230" height="160" rx="18"/><circle cx="114" cy="72" r="30" fill="#4a5ccf" stroke="#fff" stroke-width="8"/><text x="114" y="77" text-anchor="middle" class="sans" font-size="13" font-weight="800" fill="#fff">04</text><text x="22" y="122" class="sans name">Connect Notion</text><text x="22" y="144" class="sans detail">Choose the output home</text></g>
+    <g transform="translate(1108 250)"><rect class="node" width="230" height="160" rx="18"/><circle cx="114" cy="72" r="30" fill="#4a5ccf" stroke="#fff" stroke-width="8"/><text x="114" y="77" text-anchor="middle" class="sans" font-size="13" font-weight="800" fill="#fff">05</text><text x="22" y="122" class="sans name">Meet Ripple</text><text x="22" y="144" class="sans detail">Start in the workspace</text></g>
+  </g>
+
+  <g transform="translate(100 482)"><rect width="308" height="42" rx="21" fill="#fff" stroke="#e3e5eb"/><circle cx="21" cy="21" r="5" fill="#237453"/><text x="36" y="25" class="sans legend">Success confirms, then advances</text></g>
+  <g transform="translate(424 482)"><rect width="292" height="42" rx="21" fill="#fff" stroke="#e3e5eb"/><circle cx="21" cy="21" r="5" fill="#4a5ccf"/><text x="36" y="25" class="sans legend">Loading keeps context visible</text></g>
+  <g transform="translate(732 482)"><rect width="344" height="42" rx="21" fill="#fff" stroke="#e3e5eb"/><circle cx="21" cy="21" r="5" fill="#b94343"/><text x="36" y="25" class="sans legend">Error stays put with a recovery action</text></g>
+  <g transform="translate(1092 482)"><rect width="246" height="42" rx="21" fill="#eef0ff"/><text x="123" y="25" text-anchor="middle" class="sans" font-size="11" font-weight="750" fill="#3445ad">≈ 2 MINUTES TO READY</text></g>
+</svg>

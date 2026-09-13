@@ -92,15 +92,14 @@ if (missing.length === 0) {
 
   try {
     const calendar = google.calendar({ version: "v3", auth });
-    const result = await calendar.events.list({
-      calendarId: process.env.GOOGLE_CALENDAR_ID,
-      timeMin: "2026-09-14T00:00:00.000Z",
-      timeMax: "2026-09-16T12:00:00.000Z",
-      maxResults: 20,
-      singleEvents: true,
-    });
-    const timedEvents = (result.data.items ?? []).filter((event) => event.start?.dateTime && event.end?.dateTime).length;
-    record("Google Calendar", timedEvents >= 2, timedEvents >= 2 ? "Configured calendar and at least two timed demo commitments are ready" : "Add at least two timed commitments in the September 14–16 demo window");
+    const window = { timeMin: "2026-09-14T00:00:00.000Z", timeMax: "2026-09-16T12:00:00.000Z", maxResults: 50, singleEvents: true };
+    const [selected, primary] = await Promise.all([
+      calendar.events.list({ calendarId: process.env.GOOGLE_CALENDAR_ID, ...window }),
+      calendar.events.list({ calendarId: "primary", ...window }),
+    ]);
+    const selectedTimed = (selected.data.items ?? []).filter((event) => event.start?.dateTime && event.end?.dateTime).length;
+    const primaryTimed = (primary.data.items ?? []).filter((event) => event.start?.dateTime && event.end?.dateTime).length;
+    record("Google Calendar", selectedTimed >= 2, selectedTimed >= 2 ? `Primary and selected calendars are readable; ${selectedTimed} selected and ${primaryTimed} primary timed commitments found` : "Add at least two timed commitments to the selected calendar in the September 14–16 demo window");
   } catch (error) {
     record("Google Calendar", false, rejected("Google Calendar", error));
   }

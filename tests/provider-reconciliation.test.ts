@@ -100,31 +100,93 @@ describe("Gmail safety boundary", () => {
 });
 
 describe("Calendar crash-window reconciliation", () => {
-  it("excludes cancelled, transparent, and all-day entries while preserving private busy time", async () => {
+  it("merges primary and selected calendars, deduplicates shared events, and ignores declined invitations", async () => {
+    const list = vi.fn().mockImplementation(({ calendarId }: { calendarId: string }) => Promise.resolve({ data: { items: calendarId === "primary" ? [
+      { id: "external", iCalUID: "shared@example", etag: "primary-v1", summary: "External commitment", status: "confirmed", organizer: { email: "organizer@example.com" }, attendees: [{ self: true, responseStatus: "needsAction" }], start: { dateTime: "2026-09-15T09:30:00Z" }, end: { dateTime: "2026-09-15T11:00:00Z" } },
+      { id: "declined", iCalUID: "declined@example", status: "confirmed", attendees: [{ self: true, responseStatus: "declined" }], start: { dateTime: "2026-09-15T12:00:00Z" }, end: { dateTime: "2026-09-15T13:00:00Z" } },
+    ] : [
+      { id: "external-copy", iCalUID: "shared@example", etag: "selected-v1", summary: "External commitment copy", status: "confirmed", start: { dateTime: "2026-09-15T09:30:00Z" }, end: { dateTime: "2026-09-15T11:00:00Z" } },
+      { id: "executive", iCalUID: "executive@example", summary: "Executive review", status: "confirmed", organizer: { self: true }, start: { dateTime: "2026-09-15T10:30:00Z" }, end: { dateTime: "2026-09-15T11:30:00Z" } },
+    ] } }));
+    mocks.calendarFactory.mockReturnValue({ events: { list } });
+    const snapshot = await new GoogleCalendarAdapter(config).snapshot({ start_at: "2026-09-15T00:00:00Z", end_at: "2026-09-16T00:00:00Z", timezone: "Europe/Berlin" });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(snapshot.events).toHaveLength(2);
+    expect(snapshot.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event_ref: "external", source_calendar: "PRIMARY", owned_by_operator: false }),
+      expect.objectContaining({ event_ref: "executive", source_calendar: "SELECTED", owned_by_operator: true }),
+    ]));
+  });
+
+  it("excludes cancelled, transparent, and all-day entries while preserving private and Ripple-created busy time", async () => {
     mocks.calendarFactory.mockReturnValue({ events: { list: vi.fn().mockResolvedValue({ data: { items: [
       { id: "private", etag: "v1", summary: "Confidential title", visibility: "private", status: "confirmed", start: { dateTime: "2026-09-15T15:00:00Z" }, end: { dateTime: "2026-09-15T16:00:00Z" } },
       { id: "transparent", transparency: "transparent", start: { dateTime: "2026-09-15T16:00:00Z" }, end: { dateTime: "2026-09-15T17:00:00Z" } },
       { id: "cancelled", status: "cancelled", start: { dateTime: "2026-09-15T17:00:00Z" }, end: { dateTime: "2026-09-15T18:00:00Z" } },
       { id: "all-day", start: { date: "2026-09-15" }, end: { date: "2026-09-16" } },
-      { id: "ripple-owned", extendedProperties: { private: { ripple_case_id: "demo" } }, start: { dateTime: "2026-09-15T18:00:00Z" }, end: { dateTime: "2026-09-15T19:00:00Z" } },
+      { id: "ripple-owned", summary: "Team launch review", extendedProperties: { private: { ripple_case_id: "demo" } }, start: { dateTime: "2026-09-15T18:00:00Z" }, end: { dateTime: "2026-09-15T19:00:00Z" } },
     ] } }) } });
     const snapshot = await new GoogleCalendarAdapter(config).snapshot({ start_at: "2026-09-15T00:00:00Z", end_at: "2026-09-16T00:00:00Z", timezone: "America/Los_Angeles" });
-    expect(snapshot.events).toHaveLength(1);
-    expect(snapshot.events[0]).toMatchObject({ event_ref: "private", visibility: "PRIVATE" });
+    expect(snapshot.events).toHaveLength(2);
+    expect(snapshot.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event_ref: "private", visibility: "PRIVATE" }),
+      expect.objectContaining({ event_ref: "ripple-owned", title: "Team launch review" }),
+    ]));
   });
 
   it("finds an app-owned event by action id, patches it, and reads it back instead of inserting", async () => {
     const list = vi.fn().mockResolvedValue({ data: { items: [{ id: "existing-event", summary: "old" }] } });
     const patch = vi.fn().mockResolvedValue({ data: { id: "existing-event" } });
     const insert = vi.fn();
-    const get = vi.fn().mockResolvedValue({ data: { id: "existing-event", etag: "v2", extendedProperties: { private: { ripple_action_id: "calendar-action", ripple_case_id: "case" } } } });
+    const get = vi.fn().mockResolvedValue({ data: { id: "existing-event", etag: "v2", htmlLink: "https://calendar.google.com/calendar/event?eid=verified", extendedProperties: { private: { ripple_action_id: "calendar-action", ripple_case_id: "case" } } } });
     mocks.calendarFactory.mockReturnValue({ events: { list, patch, insert, get } });
     const result = await new GoogleCalendarAdapter(config).apply({ ...context, action_id: "calendar-action" }, calendar);
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ privateExtendedProperty: ["ripple_action_id=calendar-action"] }));
     expect(patch).toHaveBeenCalledWith(expect.objectContaining({ eventId: "existing-event" }));
     expect(insert).not.toHaveBeenCalled();
     expect(get).toHaveBeenCalledWith(expect.objectContaining({ eventId: "existing-event" }));
+    expect(result).toMatchObject({ verified: true, external_url: "https://calendar.google.com/calendar/event?eid=verified" });
+  });
+
+  it("sends a confirmation-gated proposed-time invitation to the original organizer without editing the source event", async () => {
+    const list = vi.fn().mockResolvedValue({ data: { items: [] } });
+    const insert = vi.fn().mockResolvedValue({ data: { id: "proposal-event" } });
+    const get = vi.fn()
+      .mockResolvedValueOnce({ data: { id: "source-event", status: "confirmed", organizer: { email: "organizer@example.com", self: false } } })
+      .mockResolvedValueOnce({ data: { id: "proposal-event", etag: "v1", htmlLink: "https://calendar.google.com/calendar/event?eid=proposal", extendedProperties: { private: { ripple_action_id: "calendar-action", ripple_case_id: "case" } } } });
+    mocks.calendarFactory.mockReturnValue({ events: { list, insert, patch: vi.fn(), get } });
+    const action: CalendarAction = { ...calendar, title: "Proposed time · External commitment", proposal_for: { event_ref: "source-event", source_calendar: "PRIMARY", original_title: "External commitment", organizer_email: "organizer@example.com" } };
+    const result = await new GoogleCalendarAdapter(config).apply({ ...context, action_id: "calendar-action" }, action);
+    expect(get).toHaveBeenNthCalledWith(1, { calendarId: "primary", eventId: "source-event" });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      calendarId: "test-calendar",
+      sendUpdates: "all",
+      requestBody: expect.objectContaining({ attendees: [{ email: "organizer@example.com" }] }),
+    }));
+    expect(result).toMatchObject({ verified: true, provider_ref: "proposal-event" });
+  });
+
+  it("stops a proposed-time send when the organizer has cancelled the original invitation", async () => {
+    const insert = vi.fn();
+    mocks.calendarFactory.mockReturnValue({ events: {
+      list: vi.fn().mockResolvedValue({ data: { items: [] } }), insert, patch: vi.fn(),
+      get: vi.fn().mockResolvedValue({ data: { id: "source-event", status: "cancelled", organizer: { email: "organizer@example.com" } } }),
+    } });
+    const action: CalendarAction = { ...calendar, proposal_for: { event_ref: "source-event", source_calendar: "PRIMARY", original_title: "External commitment", organizer_email: "organizer@example.com" } };
+    await expect(new GoogleCalendarAdapter(config).apply({ ...context, action_id: "calendar-action" }, action)).rejects.toMatchObject({ detail: { category: "CONFLICT" } });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("drops a non-Google event URL even when provider ownership verifies", async () => {
+    mocks.calendarFactory.mockReturnValue({ events: {
+      list: vi.fn().mockResolvedValue({ data: { items: [] } }),
+      patch: vi.fn(),
+      insert: vi.fn().mockResolvedValue({ data: { id: "new-event" } }),
+      get: vi.fn().mockResolvedValue({ data: { id: "new-event", etag: "v1", htmlLink: "https://calendar.google.com.evil.example/event", extendedProperties: { private: { ripple_action_id: "calendar-action", ripple_case_id: "case" } } } }),
+    } });
+    const result = await new GoogleCalendarAdapter(config).apply({ ...context, action_id: "calendar-action" }, calendar);
     expect(result.verified).toBe(true);
+    expect(result.external_url).toBeUndefined();
   });
 
   it("does not claim verification when read-back ownership markers differ", async () => {

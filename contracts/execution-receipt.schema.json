@@ -19,6 +19,7 @@
     "request_fingerprint": { "type": "string", "minLength": 1 },
     "provider_ref": { "type": "string" },
     "provider_version": { "type": "string" },
+    "external_url": { "type": "string", "format": "uri", "pattern": "^https://" },
     "verified": { "type": "boolean" },
     "before_hash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
     "after_hash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },

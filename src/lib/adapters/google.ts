@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import type { calendar_v3 } from "googleapis";
 import { AdapterError } from "../domain/errors";
 import { hash } from "../domain/hash";
 import type { CalendarAction, CalendarSnapshot, MailAction, ProviderWriteResult, SourceMessage, WriteContext } from "../domain/types";
@@ -23,9 +24,19 @@ function plainBody(part: { mimeType?: string | null; body?: { data?: string | nu
 }
 
 function normalizeError(error: unknown): AdapterError {
+  if (error instanceof AdapterError) return error;
   const status = Number((error as { code?: unknown }).code ?? (error as { response?: { status?: unknown } }).response?.status ?? 0);
   const category = status === 401 ? "AUTH" : status === 403 ? "PERMISSION" : status === 409 || status === 412 ? "CONFLICT" : status === 429 ? "RATE_LIMIT" : status >= 500 ? "TRANSIENT" : "PERMANENT";
   return new AdapterError({ category, provider_code: status ? String(status) : undefined, retryable: category === "RATE_LIMIT" || category === "TRANSIENT", safe_message: "A Google service request could not be completed." });
+}
+
+function safeCalendarUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    const allowed = url.hostname === "calendar.google.com" || (url.hostname === "www.google.com" && url.pathname.startsWith("/calendar/"));
+    return url.protocol === "https:" && allowed ? url.toString() : undefined;
+  } catch { return undefined; }
 }
 
 export class GoogleMailAdapter implements MailReaderPort, MailWriterPort {
@@ -105,17 +116,33 @@ export class GoogleCalendarAdapter implements CalendarReaderPort, CalendarWriter
   async snapshot(input: { start_at: string; end_at: string; timezone: string }): Promise<CalendarSnapshot> {
     try {
       const calendar = google.calendar({ version: "v3", auth: oauth(this.config) });
-      const result = await calendar.events.list({ calendarId: this.config.GOOGLE_CALENDAR_ID, timeMin: input.start_at, timeMax: input.end_at, singleEvents: true, maxResults: 100, timeZone: input.timezone });
-      const events = (result.data.items ?? [])
-        .filter((event) => event.status !== "cancelled" && event.transparency !== "transparent" && !event.extendedProperties?.private?.ripple_case_id && event.start?.dateTime && event.end?.dateTime)
-        .map((event) => ({
+      const sources = [
+        { calendarId: "primary", source: "PRIMARY" as const },
+        { calendarId: this.config.GOOGLE_CALENDAR_ID, source: "SELECTED" as const },
+      ];
+      const results = await Promise.all(sources.map(async (source) => ({
+        ...source,
+        result: await calendar.events.list({ calendarId: source.calendarId, timeMin: input.start_at, timeMax: input.end_at, singleEvents: true, maxResults: 250, timeZone: input.timezone }),
+      })));
+      const deduplicated = new Map<string, { event: calendar_v3.Schema$Event; source: "PRIMARY" | "SELECTED" }>();
+      for (const { result, source } of results) for (const event of result.data.items ?? []) {
+        const occurrence = event.originalStartTime?.dateTime ?? event.start?.dateTime ?? event.originalStartTime?.date ?? event.start?.date ?? "";
+        const key = `${event.iCalUID ?? event.id ?? hash(event)}:${occurrence}`;
+        if (!deduplicated.has(key)) deduplicated.set(key, { event, source });
+      }
+      const events = [...deduplicated.values()]
+        // Ripple-created holds are still real busy time. Excluding them here lets
+        // later plans collide with earlier confirmed changes.
+        .filter(({ event }) => event.status !== "cancelled" && event.transparency !== "transparent" && event.attendees?.find((attendee) => attendee.self)?.responseStatus !== "declined" && event.start?.dateTime && event.end?.dateTime)
+        .map(({ event, source }) => ({
         event_ref: event.id ?? hash(event), provider_version: event.etag ?? "unknown", title: event.summary ?? "Busy commitment",
+        source_calendar: source,
         start_at: new Date(event.start!.dateTime!).toISOString(), end_at: new Date(event.end!.dateTime!).toISOString(),
         timezone: event.start?.timeZone ?? input.timezone, attendees: (event.attendees ?? []).map((a) => a.email).filter((a): a is string => Boolean(a)),
         organizer: event.organizer?.email ?? undefined, owned_by_operator: event.organizer?.self ?? false,
         visibility: event.visibility === "private" || event.visibility === "confidential" ? "PRIVATE" as const : "DEFAULT" as const,
       }));
-      const base = { captured_at: new Date().toISOString(), start_at: input.start_at, end_at: input.end_at, timezone: input.timezone, complete: !result.data.nextPageToken, events: events.sort((a, b) => a.event_ref.localeCompare(b.event_ref)) };
+      const base = { captured_at: new Date().toISOString(), start_at: input.start_at, end_at: input.end_at, timezone: input.timezone, complete: results.every(({ result }) => !result.data.nextPageToken), events: events.sort((a, b) => `${a.source_calendar}:${a.event_ref}`.localeCompare(`${b.source_calendar}:${b.event_ref}`)) };
       return { ...base, snapshot_hash: hash({ ...base, captured_at: undefined }) };
     } catch (error) { throw normalizeError(error); }
   }
@@ -127,8 +154,17 @@ export class GoogleCalendarAdapter implements CalendarReaderPort, CalendarWriter
       const requestBody = {
         summary: action.title, description: action.description, start: { dateTime: action.start_at, timeZone: action.timezone },
         end: { dateTime: action.end_at, timeZone: action.timezone },
+        ...(action.proposal_for ? { attendees: [{ email: action.proposal_for.organizer_email }] } : {}),
         extendedProperties: { private: { ripple_case_id: context.case_id, ripple_action_id: context.action_id } },
       };
+      if (action.proposal_for) {
+        const sourceCalendarId = action.proposal_for.source_calendar === "PRIMARY" ? "primary" : this.config.GOOGLE_CALENDAR_ID;
+        const source = await calendar.events.get({ calendarId: sourceCalendarId, eventId: action.proposal_for.event_ref });
+        const organizer = source.data.organizer;
+        if (source.data.status === "cancelled") throw new AdapterError({ category: "CONFLICT", retryable: false, safe_message: "The original invitation was cancelled before Ripple could send the proposed time." });
+        if (organizer?.self) throw new AdapterError({ category: "VALIDATION", retryable: false, safe_message: "This meeting is owned by you and does not require a guest proposal." });
+        if (!organizer?.email || organizer.email.toLowerCase() !== action.proposal_for.organizer_email.toLowerCase()) throw new AdapterError({ category: "CONFLICT", retryable: false, safe_message: "The meeting organizer changed. Review the proposal again before sending it." });
+      }
       let eventId = action.event_ref;
       let beforeHash: string | null = null;
       if (!eventId) {
@@ -142,13 +178,13 @@ export class GoogleCalendarAdapter implements CalendarReaderPort, CalendarWriter
         if (eventId) beforeHash = hash(existing.data.items?.[0]);
       }
       const result = eventId
-        ? await calendar.events.patch({ calendarId: this.config.GOOGLE_CALENDAR_ID, eventId, requestBody })
-        : await calendar.events.insert({ calendarId: this.config.GOOGLE_CALENDAR_ID, requestBody });
+        ? await calendar.events.patch({ calendarId: this.config.GOOGLE_CALENDAR_ID, eventId, sendUpdates: "none", requestBody })
+        : await calendar.events.insert({ calendarId: this.config.GOOGLE_CALENDAR_ID, sendUpdates: action.proposal_for ? "all" : "none", requestBody });
       const providerRef = result.data.id ?? eventId ?? action.action_id;
       const verified = await calendar.events.get({ calendarId: this.config.GOOGLE_CALENDAR_ID, eventId: providerRef });
       const metadata = verified.data.extendedProperties?.private;
       const isVerified = verified.data.id === providerRef && metadata?.ripple_action_id === context.action_id && metadata?.ripple_case_id === context.case_id;
-      return { outcome: "SUCCEEDED", provider_ref: providerRef, provider_version: verified.data.etag ?? "unknown", verified: isVerified, before_hash: beforeHash, after_hash: hash(action), completed_at: new Date().toISOString() };
+      return { outcome: "SUCCEEDED", provider_ref: providerRef, provider_version: verified.data.etag ?? "unknown", external_url: safeCalendarUrl(verified.data.htmlLink), verified: isVerified, before_hash: beforeHash, after_hash: hash(action), completed_at: new Date().toISOString() };
     } catch (error) { throw normalizeError(error); }
   }
 }

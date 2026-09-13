@@ -1,11 +1,11 @@
 import { AdapterError } from "../domain/errors";
 import { hash } from "../domain/hash";
-import type { ArtifactAction, CalendarAction, MailAction, ProviderWriteResult, SourceMessage, WriteContext } from "../domain/types";
+import type { ArtifactAction, CalendarAction, FollowThroughTrackerAction, MailAction, ProviderWriteResult, SourceMessage, WriteContext } from "../domain/types";
 import { DEMO_EVENTS, DEMO_MESSAGES } from "../fixtures";
 import type { ProviderPorts } from "../ports";
 
 export interface FakeFaults {
-  action_type?: ArtifactAction["type"] | CalendarAction["type"] | MailAction["type"];
+  action_type?: ArtifactAction["type"] | FollowThroughTrackerAction["type"] | CalendarAction["type"] | MailAction["type"];
   category?: "AUTH" | "TRANSIENT" | "UNKNOWN_OUTCOME";
 }
 
@@ -63,6 +63,7 @@ export class FakeProviders implements ProviderPorts {
 
   artifact_writer = {
     upsert_case_brief: async (context: WriteContext, action: ArtifactAction) => this.write(context, action.type, action),
+    upsert_tracker: async (context: WriteContext, action: FollowThroughTrackerAction) => this.write(context, action.type, action),
   };
   calendar_writer = {
     apply: async (context: WriteContext, action: CalendarAction) => this.write(context, action.type, action),

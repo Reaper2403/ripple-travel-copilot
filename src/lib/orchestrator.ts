@@ -29,10 +29,10 @@ function now(): string {
 }
 
 function connector(action: PlannedAction): ExecutionReceipt["connector"] {
-  return action.type === "ARTIFACT_UPSERT" ? "ARTIFACT" : action.type === "MAIL_SEND" ? "GMAIL" : "CALENDAR";
+  return action.type === "ARTIFACT_UPSERT" || action.type === "NOTION_TRACKER_UPSERT" ? "ARTIFACT" : action.type === "MAIL_SEND" ? "GMAIL" : "CALENDAR";
 }
 
-function providers(): ProviderPorts {
+export function providerPorts(): ProviderPorts {
   const config = getServerConfig();
   if (config.PROVIDER_MODE !== "real") return singletonFake;
   assertRealProviderConfig(config);
@@ -74,7 +74,7 @@ export async function ensureDemoCase(): Promise<RecoveryCase> {
 export async function resetDemoFromInbox(): Promise<RecoveryCase> {
   const config = getServerConfig();
   if (config.PROVIDER_MODE !== "real") return resetDemoCase("cancellation");
-  const portSet = providers();
+  const portSet = providerPorts();
   const scanned = await portSet.mail_reader.scan({ label: config.GMAIL_INGEST_LABEL, limit: 1 });
   const messageId = scanned.message_ids[0];
   if (!messageId) throw new DomainError(`No message was found under the configured demo Gmail label.`, "NOT_FOUND");
@@ -113,7 +113,7 @@ export async function analyzeCase(caseId: string, forceFallback = false): Promis
     return store.saveCase(item, analyzingVersion);
   }
   const arrival = facts.segments.map((segment) => segment.revised_end_at ?? segment.scheduled_end_at).filter((value): value is string => Boolean(value)).sort().at(-1)!;
-  const calendar = await providers().calendar_reader.snapshot({
+  const calendar = await providerPorts().calendar_reader.snapshot({
     start_at: new Date(Date.parse(arrival) - 12 * 60 * 60 * 1000).toISOString(),
     end_at: new Date(Date.parse(arrival) + 36 * 60 * 60 * 1000).toISOString(),
     timezone: "America/Los_Angeles",
@@ -203,7 +203,7 @@ function assertSafeToResume(item: RecoveryCase, receipts: ExecutionReceipt[]): v
 export async function executeCase(caseId: string): Promise<RecoveryCase> {
   let item = await store.getCase(caseId);
   if (!item) throw new DomainError("Case not found.", "NOT_FOUND");
-  const portSet = providers();
+  const portSet = providerPorts();
   const priorReceipts = await store.listReceipts(item.case_id);
   if (item.status === "APPROVED") await validateApproval(item, portSet);
   else if (["EXECUTING", "PARTIALLY_COMPLETED"].includes(item.status)) assertSafeToResume(item, priorReceipts);
@@ -246,13 +246,15 @@ export async function executeCase(caseId: string): Promise<RecoveryCase> {
     try {
       const result = action.type === "ARTIFACT_UPSERT"
         ? await portSet.artifact_writer.upsert_case_brief(context, action)
+        : action.type === "NOTION_TRACKER_UPSERT"
+          ? await portSet.artifact_writer.upsert_tracker(context, action)
         : action.type === "MAIL_SEND"
           ? await portSet.mail_writer.send(context, action)
           : await portSet.calendar_writer.apply(context, action);
       if (!result.verified) {
         throw new AdapterError({ category: "UNKNOWN_OUTCOME", retryable: false, safe_message: "The provider write could not be verified and requires manual reconciliation." });
       }
-      await store.upsertReceipt({ ...receipt, status: "SUCCEEDED", provider_ref: result.provider_ref, provider_version: result.provider_version, verified: result.verified, before_hash: result.before_hash, after_hash: result.after_hash, completed_at: result.completed_at, latency_ms: Date.now() - started.getTime() });
+      await store.upsertReceipt({ ...receipt, status: "SUCCEEDED", provider_ref: result.provider_ref, provider_version: result.provider_version, external_url: result.external_url, verified: result.verified, before_hash: result.before_hash, after_hash: result.after_hash, completed_at: result.completed_at, latency_ms: Date.now() - started.getTime() });
     } catch (error) {
       const detail = error instanceof AdapterError ? error.detail : { category: "PERMANENT" as const, retryable: false, safe_message: "An unexpected provider failure occurred." };
       await store.upsertReceipt({ ...receipt, status: detail.category === "UNKNOWN_OUTCOME" ? "UNKNOWN" : "FAILED", error: detail, completed_at: now(), latency_ms: Date.now() - started.getTime() });

@@ -1,5 +1,5 @@
-import { RippleWorkspace } from "@/components/ripple-workspace";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <RippleWorkspace />;
+  redirect("/welcome");
 }

@@ -4,11 +4,11 @@
 
 It is not another calendar chatbot and it is not a travel-booking copilot. Ripple acts like an executive scheduling partner: it understands what deserves protection, finds feasible alternatives, asks for missing preferences, and makes the exact approved change while preserving a professional record of what changed and why.
 
-> **Demo video:** 
+## Demo
 
-https://github.com/user-attachments/assets/3a0766c3-77d2-41cf-b7d7-d024e8d785cc
- Drive Video Link : https://drive.google.com/file/d/1fNcU-f8HCfns0Id1CC0tR5bJK17YEtld/view?usp=sharing
+[![Watch the two-minute Ripple demo](public/demo-assets/ripple-demo-poster.png)](https://github.com/user-attachments/assets/3a0766c3-77d2-41cf-b7d7-d024e8d785cc)
 
+**[▶ Watch the two-minute demo](https://github.com/user-attachments/assets/3a0766c3-77d2-41cf-b7d7-d024e8d785cc)** · [Google Drive backup](https://drive.google.com/file/d/1fNcU-f8HCfns0Id1CC0tR5bJK17YEtld/view?usp=sharing)
 
 ![Ripple's four-step workflow](public/demo-assets/ripple-four-step-flow.png)
 
